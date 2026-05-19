@@ -205,25 +205,35 @@ def check_fatura_exists(mes_referencia):
 # INTEGRAÇÃO COM GOOGLE DRIVE (UPLOADS)
 # ==========================================
 def upload_to_drive(file_bytes, filename):
-    creds = get_gcp_credentials()
-    service = build('drive', 'v3', credentials=creds)
-    
-    # Procurar a pasta "app"
-    results = service.files().list(q="mimeType='application/vnd.google-apps.folder' and name='app'", spaces='drive').execute()
-    folders = results.get('files', [])
-    
-    file_metadata = {'name': filename}
-    if folders:
-        folder_id = folders[0]['id']
-        file_metadata['parents'] = [folder_id]
-        
-    media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype='application/octet-stream', resumable=True)
-    file = service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
-    
-    # Tornar visível para qualquer pessoa com o link (para que o Streamlit possa exibir/fazer o download clicável)
     try:
-        service.permissions().create(fileId=file.get('id'), body={'type': 'anyone', 'role': 'reader'}).execute()
-    except Exception as e:
-        pass # Ignora se não puder alterar permissões
+        creds = get_gcp_credentials()
+        service = build('drive', 'v3', credentials=creds)
         
-    return file.get('webViewLink')
+        # Procurar a pasta "app"
+        results = service.files().list(q="mimeType='application/vnd.google-apps.folder' and name='app'", spaces='drive').execute()
+        folders = results.get('files', [])
+        
+        file_metadata = {'name': filename}
+        if folders:
+            folder_id = folders[0]['id']
+            file_metadata['parents'] = [folder_id]
+            
+        # resumable=False é mais seguro para arquivos pequenos em ambientes Serverless
+        media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype='application/octet-stream', resumable=False)
+        file = service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
+        
+        # Tornar visível para qualquer pessoa com o link
+        try:
+            service.permissions().create(fileId=file.get('id'), body={'type': 'anyone', 'role': 'reader'}).execute()
+        except Exception as e:
+            pass # Ignora se não puder alterar permissões
+            
+        return file.get('webViewLink')
+    except Exception as e:
+        import streamlit as st
+        # Captura e exibe o erro real do Google (ex: permissão negada)
+        error_msg = str(e)
+        if hasattr(e, 'reason'):
+            error_msg = f"{e.reason} - {error_msg}"
+        st.error(f"**Falha ao enviar arquivo para o Google Drive.**\n\nDetalhes do erro do Google: `{error_msg}`")
+        st.stop()
