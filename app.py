@@ -15,6 +15,27 @@ if 'confirmar_duplicado' not in st.session_state:
     st.session_state.confirmar_duplicado = False
 if 'dados_temporarios' not in st.session_state:
     st.session_state.dados_temporarios = {}
+if 'autenticado' not in st.session_state:
+    st.session_state.autenticado = False
+
+if not st.session_state.autenticado:
+    st.markdown("<h1 style='text-align: center;'>🔒 Acesso Restrito</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center;'>Insira suas credenciais para acessar o ERP Imobiliário.</p>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        with st.form("form_login"):
+            usuario_input = st.text_input("Usuário")
+            senha_input = st.text_input("Senha", type="password")
+            submit_login = st.form_submit_button("Entrar")
+            
+            if submit_login:
+                if usuario_input == st.secrets["credenciais"]["usuario"] and senha_input == st.secrets["credenciais"]["senha"]:
+                    st.session_state.autenticado = True
+                    st.rerun()
+                else:
+                    st.error("Usuário ou senha incorretos.")
+    st.stop()
 
 # ==========================================
 # SETUP DO BANCO DE DADOS (SQLite)

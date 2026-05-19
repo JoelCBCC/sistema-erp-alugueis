@@ -1,6 +1,7 @@
 # Banco de dados (não deve ser commitado para não expor dados reais)
 *.db
 *.sqlite3
+alugueis.db
 
 # Python e Ambientes Virtuais
 __pycache__/
@@ -17,4 +18,5 @@ venv.bak/
 
 # Streamlit e Arquivos Temporários
 .streamlit/credentials.toml
+.streamlit/secrets.toml
 .DS_Store
