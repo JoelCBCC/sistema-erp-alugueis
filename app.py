@@ -341,7 +341,13 @@ with tab_contrato:
             inp_aluguel = st.number_input("Valor Base do Aluguel (R$)", min_value=0.0, value=float(contrato_atual["valor_aluguel"]) if contrato_atual else 1500.0, step=100.0, format="%.2f")
             inp_bonus = st.number_input("Desconto de Pontualidade (R$)", min_value=0.0, value=float(contrato_atual["bonus_pontualidade"]) if contrato_atual else 150.0, step=10.0, format="%.2f")
         with c_col2:
-            inp_inicio = st.date_input("Data de Início do Contrato", value=pd.to_datetime(contrato_atual["data_inicio"]).date() if contrato_atual else date.today())
+            try:
+                default_date = pd.to_datetime(contrato_atual["data_inicio"]).date() if contrato_atual and str(contrato_atual.get("data_inicio")).strip() else date.today()
+                if pd.isna(default_date): default_date = date.today()
+            except:
+                default_date = date.today()
+            
+            inp_inicio = st.date_input("Data de Início do Contrato", value=default_date)
             inp_caucao = st.number_input("Caução Inicial / Garantia (R$)", min_value=0.0, value=float(contrato_atual["caucao_inicial"]) if contrato_atual else 4500.0, step=100.0, format="%.2f")
             inp_multa = st.number_input("Percentual de Multa ao Dia (%)", min_value=0.0, max_value=100.0, value=float(contrato_atual["percentual_multa"]) if contrato_atual else 0.33, step=0.01, format="%.2f")
             
