@@ -139,8 +139,8 @@ with st.sidebar.form("form_nova_fatura"):
             if arquivo_upado is not None:
                 anexo_bytes = arquivo_upado.read()
                 nome_anexo = arquivo_upado.name
-                with st.spinner("Enviando anexo para o Google Drive..."):
-                    anexo_url = db.upload_to_drive(anexo_bytes, nome_anexo)
+                with st.spinner("Enviando anexo para a nuvem..."):
+                    anexo_url = db.upload_to_gcs(anexo_bytes, nome_anexo)
                 
             if db.check_fatura_exists(novo_mes) and not st.session_state.confirmar_duplicado:
                 st.session_state.confirmar_duplicado = True

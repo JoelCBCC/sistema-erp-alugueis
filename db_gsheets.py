@@ -2,9 +2,8 @@ import streamlit as st
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
 import io
+from google.cloud import storage
 import time
 
 # Scopes needed for Google Sheets and Google Drive
@@ -202,38 +201,30 @@ def check_fatura_exists(mes_referencia):
     return str(mes_referencia) in col_mes
 
 # ==========================================
-# INTEGRAÇÃO COM GOOGLE DRIVE (UPLOADS)
+# INTEGRAÇÃO COM GOOGLE CLOUD STORAGE (UPLOADS)
 # ==========================================
-def upload_to_drive(file_bytes, filename):
+def upload_to_gcs(file_bytes, filename):
+    import streamlit as st
     try:
-        creds = get_gcp_credentials()
-        service = build('drive', 'v3', credentials=creds)
+        creds_dict = st.secrets["gcp_service_account"]
+        credentials = Credentials.from_service_account_info(creds_dict)
         
-        # Procurar a pasta "app"
-        results = service.files().list(q="mimeType='application/vnd.google-apps.folder' and name='app'", spaces='drive').execute()
-        folders = results.get('files', [])
+        # Conecta ao cliente do Storage usando as credenciais do robô
+        storage_client = storage.Client(credentials=credentials, project=creds_dict["project_id"])
         
-        file_metadata = {'name': filename}
-        if folders:
-            folder_id = folders[0]['id']
-            file_metadata['parents'] = [folder_id]
-            
-        # resumable=False é mais seguro para arquivos pequenos em ambientes Serverless
-        media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype='application/octet-stream', resumable=False)
-        file = service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
+        # O nome do bucket que você criou
+        bucket_name = "erp-alugueis-anexos"
+        bucket = storage_client.bucket(bucket_name)
         
-        # Tornar visível para qualquer pessoa com o link
-        try:
-            service.permissions().create(fileId=file.get('id'), body={'type': 'anyone', 'role': 'reader'}).execute()
-        except Exception as e:
-            pass # Ignora se não puder alterar permissões
-            
-        return file.get('webViewLink')
+        # Cria um blob (arquivo) dentro do bucket
+        blob = bucket.blob(filename)
+        
+        # Faz o upload (como o tipo MIME pode variar, octet-stream garante que funciona pra PDF/Imagem)
+        blob.upload_from_string(file_bytes, content_type='application/octet-stream')
+        
+        # Retorna a URL pública (já que configuramos allUsers -> Leitor)
+        return blob.public_url
     except Exception as e:
         import streamlit as st
-        # Captura e exibe o erro real do Google (ex: permissão negada)
-        error_msg = str(e)
-        if hasattr(e, 'reason'):
-            error_msg = f"{e.reason} - {error_msg}"
-        st.error(f"**Falha ao enviar arquivo para o Google Drive.**\n\nDetalhes do erro do Google: `{error_msg}`")
+        st.error(f"**Falha ao enviar arquivo para o Google Cloud Storage.**\n\nDetalhes: `{str(e)}`")
         st.stop()
