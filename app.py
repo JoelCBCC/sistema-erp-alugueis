@@ -41,8 +41,12 @@ if not st.session_state.autenticado:
 # ==========================================
 # SETUP DO BANCO DE DADOS (SQLite)
 # ==========================================
-# Inicializa o banco assim que o script roda
-db.init_db()
+# Inicializa o banco (com cache para não deixar o sistema lento a cada clique)
+@st.cache_data
+def run_init_db_once():
+    db.init_db()
+
+run_init_db_once()
 
 # ==========================================
 # FUNÇÕES DE CARREGAMENTO (Inversão de Controle)

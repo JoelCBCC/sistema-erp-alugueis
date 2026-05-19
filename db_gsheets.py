@@ -46,15 +46,15 @@ def init_db():
     except gspread.exceptions.WorksheetNotFound:
         ws_caucao = sh.add_worksheet(title="tabela_caucao_historico", rows="100", cols="10")
 
-    # Iniciar cabeçalhos se estiverem vazios
-    if len(ws_historico.get_all_values()) == 0:
-        ws_historico.append_row(["id", "mes_referencia", "vencimento", "data_pagamento", "status", "dias_atraso", "total_variaveis", "situacao", "anexo", "nome_anexo"])
+    # Iniciar cabeçalhos se não existirem
+    if ws_historico.acell('A1').value != "id":
+        ws_historico.insert_row(["id", "mes_referencia", "vencimento", "data_pagamento", "status", "dias_atraso", "total_variaveis", "situacao", "anexo", "nome_anexo"], 1)
         
-    if len(ws_contrato.get_all_values()) == 0:
-        ws_contrato.append_row(["id", "inquilina", "valor_aluguel", "bonus_pontualidade", "percentual_multa", "caucao_inicial", "data_inicio"])
+    if ws_contrato.acell('A1').value != "id":
+        ws_contrato.insert_row(["id", "inquilina", "valor_aluguel", "bonus_pontualidade", "percentual_multa", "caucao_inicial", "data_inicio"], 1)
         
-    if len(ws_caucao.get_all_values()) == 0:
-        ws_caucao.append_row(["id", "data_atualizacao", "indice_percentual", "valor_atualizado"])
+    if ws_caucao.acell('A1').value != "id":
+        ws_caucao.insert_row(["id", "data_atualizacao", "indice_percentual", "valor_atualizado"], 1)
 
 def load_data():
     sh = get_spreadsheet()
