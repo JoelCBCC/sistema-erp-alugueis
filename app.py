@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-import sqlite3
+import db_gsheets as db
+import time
 from datetime import date, timedelta
 
 # Configuração da página - Deve ser a primeira chamada do Streamlit
@@ -40,99 +41,20 @@ if not st.session_state.autenticado:
 # ==========================================
 # SETUP DO BANCO DE DADOS (SQLite)
 # ==========================================
-def init_db():
-    conn = sqlite3.connect('alugueis.db')
-    cursor = conn.cursor()
-    
-    # 1. Tabela Histórico (Faturamento)
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS historico (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            mes_referencia TEXT,
-            vencimento DATE,
-            data_pagamento DATE,
-            status TEXT,
-            dias_atraso INTEGER,
-            total_variaveis REAL DEFAULT 0.0,
-            situacao TEXT DEFAULT 'Aberta',
-            anexo BLOB,
-            nome_anexo TEXT
-        )
-    ''')
-    
-    # MIGRATION: Histórico
-    try: cursor.execute("ALTER TABLE historico ADD COLUMN total_variaveis REAL DEFAULT 0.0")
-    except sqlite3.OperationalError: pass
-    try: cursor.execute("ALTER TABLE historico ADD COLUMN situacao TEXT DEFAULT 'Aberta'")
-    except sqlite3.OperationalError: pass
-    try: cursor.execute("ALTER TABLE historico ADD COLUMN anexo BLOB")
-    except sqlite3.OperationalError: pass
-    try: cursor.execute("ALTER TABLE historico ADD COLUMN nome_anexo TEXT")
-    except sqlite3.OperationalError: pass
-    
-    # Garante que registros antigos com data de pagamento sejam considerados 'Paga'
-    cursor.execute("UPDATE historico SET situacao = 'Paga' WHERE situacao = 'Aberta' AND data_pagamento IS NOT NULL")
-    
-    # 2. Tabela Contrato
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS tabela_contrato (
-            id INTEGER PRIMARY KEY,
-            inquilina TEXT,
-            valor_aluguel REAL,
-            bonus_pontualidade REAL,
-            percentual_multa REAL,
-            caucao_inicial REAL,
-            data_inicio TEXT
-        )
-    ''')
-    
-    # 3. Tabela Caução
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS tabela_caucao_historico (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            data_atualizacao TEXT,
-            indice_percentual REAL,
-            valor_atualizado REAL
-        )
-    ''')
-    
-    conn.commit()
-    conn.close()
-
 # Inicializa o banco assim que o script roda
-init_db()
+db.init_db()
 
 # ==========================================
 # FUNÇÕES DE CARREGAMENTO (Inversão de Controle)
 # ==========================================
 def load_data():
-    conn = sqlite3.connect('alugueis.db')
-    df = pd.read_sql_query("SELECT * FROM historico ORDER BY vencimento ASC", conn)
-    conn.close()
-    return df
+    return db.load_data()
 
 def load_contrato():
-    conn = sqlite3.connect('alugueis.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM tabela_contrato WHERE id = 1")
-    row = cursor.fetchone()
-    conn.close()
-    if row:
-        return {
-            "inquilina": row[1],
-            "valor_aluguel": row[2],
-            "bonus_pontualidade": row[3],
-            "percentual_multa": row[4],
-            "caucao_inicial": row[5],
-            "data_inicio": row[6]
-        }
-    return None
+    return db.load_contrato()
 
 def load_caucao():
-    conn = sqlite3.connect('alugueis.db')
-    df = pd.read_sql_query("SELECT * FROM tabela_caucao_historico ORDER BY id ASC", conn)
-    conn.close()
-    return df
+    return db.load_caucao()
 
 def format_currency(value):
     """Formata valor float para moeda local (pt-BR)."""
@@ -208,43 +130,30 @@ with st.sidebar.form("form_nova_fatura"):
         if not contrato_atual:
             st.error("⚠️ Configure o contrato antes de gerar faturas!")
         elif novo_mes.strip() != "":
-            conn = sqlite3.connect('alugueis.db')
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM historico WHERE mes_referencia = ?", (novo_mes,))
-            count = cursor.fetchone()[0]
-            conn.close()
-            
-            anexo_bytes = None
-            nome_anexo = None
+            anexo_url = ""
+            nome_anexo = ""
             if arquivo_upado is not None:
                 anexo_bytes = arquivo_upado.read()
                 nome_anexo = arquivo_upado.name
+                with st.spinner("Enviando anexo para o Google Drive..."):
+                    anexo_url = db.upload_to_drive(anexo_bytes, nome_anexo)
                 
-            if count > 0 and not st.session_state.confirmar_duplicado:
+            if db.check_fatura_exists(novo_mes) and not st.session_state.confirmar_duplicado:
                 st.session_state.confirmar_duplicado = True
                 st.session_state.dados_temporarios = {
                     'novo_mes': novo_mes,
                     'novo_vencimento': novo_vencimento,
                     'total_variaveis': total_variaveis,
-                    'anexo_bytes': anexo_bytes,
+                    'anexo_url': anexo_url,
                     'nome_anexo': nome_anexo
                 }
                 st.rerun()
             else:
-                status_novo = "Aguardando"
-                situacao_nova = "Aberta"
-                dias_atraso = 0
-                
-                conn = sqlite3.connect('alugueis.db')
-                cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT INTO historico (mes_referencia, vencimento, data_pagamento, status, dias_atraso, total_variaveis, situacao, anexo, nome_anexo)
-                    VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?)
-                ''', (novo_mes, novo_vencimento, status_novo, dias_atraso, total_variaveis, situacao_nova, anexo_bytes, nome_anexo))
-                conn.commit()
-                conn.close()
+                with st.spinner("Gerando fatura na planilha..."):
+                    db.insert_fatura(novo_mes, novo_vencimento, "Aguardando", 0, total_variaveis, "Aberta", anexo_url, nome_anexo)
                 st.session_state.confirmar_duplicado = False
-                
+                st.success("Fatura gerada com sucesso!")
+                time.sleep(1)
                 st.rerun()
         else:
             st.error("O campo 'Mês de Referência' é obrigatório!")
@@ -265,14 +174,8 @@ with tab_faturamento:
         with col_btn1:
             if st.button("Sim, Prosseguir", type="primary"):
                 dados = st.session_state.dados_temporarios
-                conn = sqlite3.connect('alugueis.db')
-                cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT INTO historico (mes_referencia, vencimento, data_pagamento, status, dias_atraso, total_variaveis, situacao, anexo, nome_anexo)
-                    VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?)
-                ''', (dados['novo_mes'], dados['novo_vencimento'], "Aguardando", 0, dados['total_variaveis'], "Aberta", dados['anexo_bytes'], dados['nome_anexo']))
-                conn.commit()
-                conn.close()
+                with st.spinner("Inserindo fatura..."):
+                    db.insert_fatura(dados['novo_mes'], dados['novo_vencimento'], "Aguardando", 0, dados['total_variaveis'], "Aberta", dados['anexo_url'], dados['nome_anexo'])
                 st.session_state.confirmar_duplicado = False
                 st.rerun()
         with col_btn2:
@@ -366,11 +269,10 @@ with tab_faturamento:
                 with d_col3: st.metric("Gastos Variáveis", format_currency(historico_variaveis), delta="Registrados no Mês", delta_color="off")
                 with d_col4: st.metric("Total da Fatura" if situacao_selecionada == "Aberta" else "Total Pago", format_currency(total_fatura), delta=f"Situação: {situacao_selecionada}", delta_color="normal" if situacao_selecionada == "Paga" else "off")
                     
-                nome_anexo = linha_selecionada.get("nome_anexo", None)
-                anexo_bytes = linha_selecionada.get("anexo", None)
-                if pd.notna(nome_anexo) and nome_anexo and pd.notna(anexo_bytes) and anexo_bytes:
-                    st.markdown(f"📎 **Anexo:** {nome_anexo}")
-                    st.download_button(label="⬇️ Baixar Anexo", data=anexo_bytes, file_name=nome_anexo)
+                nome_anexo = linha_selecionada.get("nome_anexo", "")
+                anexo_url = linha_selecionada.get("anexo", "")
+                if pd.notna(nome_anexo) and str(nome_anexo).strip() != "" and pd.notna(anexo_url) and str(anexo_url).strip() != "":
+                    st.markdown(f"📎 **Anexo:** [{nome_anexo}]({anexo_url})")
                 
                 if situacao_selecionada == "Aberta":
                     st.markdown("### 💰 Registrar Pagamento")
@@ -388,21 +290,15 @@ with tab_faturamento:
                             dias_atraso_real = max(0, dias_atraso_calc)
                             status_pag = "Em Atraso" if dias_atraso_real > 0 else "No Prazo"
                             
-                            conn = sqlite3.connect('alugueis.db')
-                            cursor = conn.cursor()
-                            cursor.execute("UPDATE historico SET situacao = 'Paga', data_pagamento = ?, dias_atraso = ?, status = ? WHERE id = ?", (dt_pagamento, dias_atraso_real, status_pag, int(row_id)))
-                            conn.commit()
-                            conn.close()
+                            with st.spinner("Atualizando planilha..."):
+                                db.update_pagamento(row_id, dt_pagamento, dias_atraso_real, status_pag, "Paga")
                             st.rerun()
 
                 st.markdown("---")
                 st.markdown("### ⚙️ Ações da Fatura")
                 if st.button("🗑️ Excluir Fatura", type="primary"):
-                    conn = sqlite3.connect('alugueis.db')
-                    cursor = conn.cursor()
-                    cursor.execute("DELETE FROM historico WHERE id = ?", (row_id,))
-                    conn.commit()
-                    conn.close()
+                    with st.spinner("Excluindo da planilha..."):
+                        db.delete_fatura(row_id)
                     st.rerun()
                     
                 with st.expander("✏️ Editar Dados desta Fatura"):
@@ -421,17 +317,14 @@ with tab_faturamento:
                             
                         btn_salvar = st.form_submit_button("Salvar Alterações")
                         if btn_salvar:
-                            conn = sqlite3.connect('alugueis.db')
-                            cursor = conn.cursor()
-                            if situacao_selecionada == "Paga":
-                                dias_calc = (edit_pagamento - edit_vencimento).days
-                                dias_reais = max(0, dias_calc)
-                                novo_status = "Em Atraso" if dias_reais > 0 else "No Prazo"
-                                cursor.execute("UPDATE historico SET mes_referencia=?, vencimento=?, total_variaveis=?, data_pagamento=?, status=?, dias_atraso=? WHERE id=?", (edit_mes, edit_vencimento, edit_variaveis, edit_pagamento, novo_status, dias_reais, row_id))
-                            else:
-                                cursor.execute("UPDATE historico SET mes_referencia=?, vencimento=?, total_variaveis=? WHERE id=?", (edit_mes, edit_vencimento, edit_variaveis, row_id))
-                            conn.commit()
-                            conn.close()
+                            with st.spinner("Atualizando fatura..."):
+                                if situacao_selecionada == "Paga":
+                                    dias_calc = (edit_pagamento - edit_vencimento).days
+                                    dias_reais = max(0, dias_calc)
+                                    novo_status = "Em Atraso" if dias_reais > 0 else "No Prazo"
+                                    db.update_fatura(row_id, edit_mes, edit_vencimento, edit_variaveis, edit_pagamento, novo_status, dias_reais, situacao_selecionada)
+                                else:
+                                    db.update_fatura(row_id, edit_mes, edit_vencimento, edit_variaveis, None, linha_selecionada["status"], linha_selecionada["dias_atraso"], situacao_selecionada)
                             st.rerun()
 
 
@@ -455,29 +348,10 @@ with tab_contrato:
         btn_salvar_contrato = st.form_submit_button("Salvar Contrato", type="primary")
         
         if btn_salvar_contrato:
-            conn = sqlite3.connect('alugueis.db')
-            cursor = conn.cursor()
-            
-            if contrato_atual:
-                cursor.execute('''
-                    UPDATE tabela_contrato 
-                    SET inquilina=?, valor_aluguel=?, bonus_pontualidade=?, percentual_multa=?, caucao_inicial=?, data_inicio=?
-                    WHERE id=1
-                ''', (inp_inquilina, inp_aluguel, inp_bonus, inp_multa, inp_caucao, str(inp_inicio)))
-            else:
-                cursor.execute('''
-                    INSERT INTO tabela_contrato (id, inquilina, valor_aluguel, bonus_pontualidade, percentual_multa, caucao_inicial, data_inicio)
-                    VALUES (1, ?, ?, ?, ?, ?, ?)
-                ''', (inp_inquilina, inp_aluguel, inp_bonus, inp_multa, inp_caucao, str(inp_inicio)))
-                
-                # Se é o primeiro registro, lança a caução inicial como marco zero no histórico
-                cursor.execute('''
-                    INSERT INTO tabela_caucao_historico (data_atualizacao, indice_percentual, valor_atualizado)
-                    VALUES (?, 0.0, ?)
-                ''', (str(inp_inicio), inp_caucao))
-                
-            conn.commit()
-            conn.close()
+            with st.spinner("Salvando contrato na planilha..."):
+                db.save_contrato(inp_inquilina, inp_aluguel, inp_bonus, inp_multa, inp_caucao, inp_inicio)
+                if not contrato_atual:
+                    db.insert_caucao(inp_inicio, 0.0, inp_caucao)
             st.success("Contrato salvo com sucesso!")
             st.rerun()
 
@@ -503,14 +377,8 @@ with tab_contrato:
             if btn_aplicar:
                 novo_valor_caucao = ultimo_valor_caucao * (1 + (perc_reajuste / 100))
                 
-                conn = sqlite3.connect('alugueis.db')
-                cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT INTO tabela_caucao_historico (data_atualizacao, indice_percentual, valor_atualizado)
-                    VALUES (?, ?, ?)
-                ''', (str(dt_reajuste), perc_reajuste, novo_valor_caucao))
-                conn.commit()
-                conn.close()
+                with st.spinner("Registrando reajuste..."):
+                    db.insert_caucao(dt_reajuste, perc_reajuste, novo_valor_caucao)
                 st.success("Reajuste aplicado com sucesso!")
                 st.rerun()
                 
