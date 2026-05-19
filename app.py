@@ -78,9 +78,13 @@ contrato_atual = load_contrato()
 # BARRA LATERAL (SIDEBAR)
 # ==========================================
 st.sidebar.success("Logado como: Administrador")
-if st.sidebar.button("Sair do Sistema", type="secondary"):
+if st.sidebar.button("Sair do Sistema", use_container_width=True):
     st.session_state.autenticado = False
     st.rerun()
+    
+if st.sidebar.button("ℹ️ Sobre o Sistema", use_container_width=True):
+    modal_sobre()
+    
 st.sidebar.markdown("---")
 
 st.sidebar.header("⚙️ Parâmetros do Contrato")
