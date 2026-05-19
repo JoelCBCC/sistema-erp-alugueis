@@ -12,6 +12,18 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+@st.dialog("Sobre o Sistema")
+def modal_sobre():
+    st.image("https://cdn-icons-png.flaticon.com/512/3204/3204094.png", width=80)
+    st.markdown("### ERP Automático de Aluguéis")
+    st.markdown("**Versão:** 1.0.0")
+    st.markdown("**Desenvolvedor:** Joel Luciano")
+    st.markdown("---")
+    st.markdown("*(O texto completo descrevendo os detalhes do programa, história ou instruções será inserido aqui posteriormente)*")
+    
+    if st.button("OK / Voltar", type="primary", use_container_width=True):
+        st.rerun()
+
 if 'confirmar_duplicado' not in st.session_state:
     st.session_state.confirmar_duplicado = False
 if 'dados_temporarios' not in st.session_state:
