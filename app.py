@@ -367,8 +367,15 @@ with tab_contrato:
     df_caucao = load_caucao()
     ultimo_valor_caucao = 0.0
     
-    if not df_caucao.empty:
-        ultimo_valor_caucao = df_caucao.iloc[-1]["valor_atualizado"]
+    # Verifica se tem dados e se as colunas existem
+    tem_dados_validos = not df_caucao.empty and "valor_atualizado" in df_caucao.columns and len(df_caucao.columns) >= 3
+    
+    if tem_dados_validos:
+        # Filtra linhas vazias acidentais do Google Sheets
+        df_valid = df_caucao[df_caucao["valor_atualizado"].astype(str).str.strip() != ""]
+        if not df_valid.empty:
+            ultimo_valor_caucao = float(df_valid.iloc[-1]["valor_atualizado"])
+            
         st.metric("Saldo Atual da Caução", format_currency(ultimo_valor_caucao))
         
         with st.form("form_reajuste_caucao"):
@@ -391,7 +398,12 @@ with tab_contrato:
         st.markdown("#### Histórico de Rendimentos da Garantia")
         # Mostrar tabela amigável
         df_exibicao_caucao = df_caucao.copy()
-        df_exibicao_caucao.columns = ["ID", "Data da Atualização", "Índice Aplicado (%)", "Valor Atualizado (R$)"]
-        st.dataframe(df_exibicao_caucao[["Data da Atualização", "Índice Aplicado (%)", "Valor Atualizado (R$)"]], use_container_width=True, hide_index=True)
+        
+        # Garante que só vai tentar renomear as 4 colunas esperadas se elas existirem
+        if len(df_exibicao_caucao.columns) == 4:
+            df_exibicao_caucao.columns = ["ID", "Data da Atualização", "Índice Aplicado (%)", "Valor Atualizado (R$)"]
+            st.dataframe(df_exibicao_caucao[["Data da Atualização", "Índice Aplicado (%)", "Valor Atualizado (R$)"]], use_container_width=True, hide_index=True)
+        else:
+            st.dataframe(df_exibicao_caucao, use_container_width=True, hide_index=True)
     else:
         st.info("Nenhuma caução registrada no histórico. Salve as configurações do Contrato Vigente para inicializar a garantia.")
