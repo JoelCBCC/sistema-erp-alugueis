@@ -83,6 +83,15 @@ def format_currency(value):
     """Formata valor float para moeda local (pt-BR)."""
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+def format_date(date_str):
+    """Formata data YYYY-MM-DD para DD/MM/YYYY."""
+    if not date_str or pd.isna(date_str) or str(date_str).strip() == "":
+        return ""
+    try:
+        return pd.to_datetime(date_str).strftime("%d/%m/%Y")
+    except:
+        return date_str
+
 # ==========================================
 # TÍTULO PRINCIPAL
 # ==========================================
@@ -126,7 +135,7 @@ if st.session_state.role == "Inquilino":
             
             m1, m2, m3, m4 = st.columns(4)
             with m1:
-                st.metric("Vencimento", str(fat['vencimento']))
+                st.metric("Vencimento", format_date(fat['vencimento']))
             with m2:
                 st.metric("Aluguel Base", format_currency(val_base))
             with m3:
@@ -142,7 +151,8 @@ if st.session_state.role == "Inquilino":
     st.markdown("---")
     st.markdown("#### Meu Histórico de Faturas")
     if not df_historico.empty:
-        df_exibicao = df_historico[["mes_referencia", "vencimento", "status", "dias_atraso", "situacao", "anexo"]]
+        df_exibicao = df_historico[["mes_referencia", "vencimento", "status", "dias_atraso", "situacao", "anexo"]].copy()
+        df_exibicao["vencimento"] = pd.to_datetime(df_exibicao["vencimento"], errors='coerce').dt.strftime("%d/%m/%Y").fillna("")
         st.dataframe(
             df_exibicao, 
             use_container_width=True, 
@@ -322,7 +332,9 @@ with tab_faturamento:
             st.markdown("---")
             st.subheader("🗓️ Contas a Receber & Histórico")
             
-            df_exibicao = df_historico[["mes_referencia", "vencimento", "data_pagamento", "situacao", "status", "dias_atraso", "total_variaveis"]]
+            df_exibicao = df_historico[["mes_referencia", "vencimento", "data_pagamento", "situacao", "status", "dias_atraso", "total_variaveis"]].copy()
+            df_exibicao["vencimento"] = pd.to_datetime(df_exibicao["vencimento"], errors='coerce').dt.strftime("%d/%m/%Y").fillna("")
+            df_exibicao["data_pagamento"] = pd.to_datetime(df_exibicao["data_pagamento"], errors='coerce').dt.strftime("%d/%m/%Y").fillna("")
             
             event = st.dataframe(
                 df_exibicao, 
@@ -503,6 +515,7 @@ with tab_contrato:
         # Garante que só vai tentar renomear as 4 colunas esperadas se elas existirem
         if len(df_exibicao_caucao.columns) == 4:
             df_exibicao_caucao.columns = ["ID", "Data da Atualização", "Índice Aplicado (%)", "Valor Atualizado (R$)"]
+            df_exibicao_caucao["Data da Atualização"] = pd.to_datetime(df_exibicao_caucao["Data da Atualização"], errors='coerce').dt.strftime("%d/%m/%Y").fillna("")
             st.dataframe(df_exibicao_caucao[["Data da Atualização", "Índice Aplicado (%)", "Valor Atualizado (R$)"]], use_container_width=True, hide_index=True)
         else:
             st.dataframe(df_exibicao_caucao, use_container_width=True, hide_index=True)
