@@ -15,7 +15,26 @@ SCOPES = [
 
 @st.cache_resource
 def get_gcp_credentials():
-    return Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=SCOPES)
+    import json
+    secret_data = None
+    if "gcp_service_account" in st.secrets:
+        secret = st.secrets["gcp_service_account"]
+        if isinstance(secret, str):
+            try:
+                secret_data = json.loads(secret)
+            except Exception as e:
+                st.error(f"Erro ao ler JSON de credenciais: {e}")
+                st.stop()
+        else:
+            secret_data = dict(secret)
+    elif "type" in st.secrets and st.secrets["type"] == "service_account":
+        # Se o usuário colou direto na raiz sem usar o cabeçalho [gcp_service_account]
+        secret_data = dict(st.secrets)
+    else:
+        st.error("Credenciais do Google Cloud não encontradas ou mal formatadas no st.secrets.")
+        st.stop()
+        
+    return Credentials.from_service_account_info(secret_data, scopes=SCOPES)
 
 @st.cache_resource
 def get_gspread_client():
