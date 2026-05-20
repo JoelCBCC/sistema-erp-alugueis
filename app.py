@@ -35,6 +35,16 @@ if 'role' not in st.session_state:
 if 'telefone_vinculo' not in st.session_state:
     st.session_state.telefone_vinculo = None
 
+# ==========================================
+# SETUP DO BANCO DE DADOS (Google Sheets)
+# ==========================================
+# Inicializa o banco (com cache para não deixar o sistema lento a cada clique)
+@st.cache_data
+def run_init_db_once():
+    db.init_db()
+
+run_init_db_once()
+
 if not st.session_state.autenticado:
     st.markdown("<h1 style='text-align: center;'>🏢 Acesso Restrito</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center;'>Insira suas credenciais para acessar o ERP Imobiliário.</p>", unsafe_allow_html=True)
@@ -56,16 +66,6 @@ if not st.session_state.autenticado:
                 else:
                     st.error("Usuário ou senha incorretos.")
     st.stop()
-
-# ==========================================
-# SETUP DO BANCO DE DADOS (SQLite)
-# ==========================================
-# Inicializa o banco (com cache para não deixar o sistema lento a cada clique)
-@st.cache_data
-def run_init_db_once():
-    db.init_db()
-
-run_init_db_once()
 
 # ==========================================
 # FUNÇÕES DE CARREGAMENTO (Inversão de Controle)
