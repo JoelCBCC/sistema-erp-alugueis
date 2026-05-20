@@ -98,7 +98,7 @@ contrato_atual = load_contrato()
 # ==========================================
 if st.session_state.role == "Inquilino":
     st.markdown("<style>[data-testid='stSidebar'] {display: none;}</style>", unsafe_allow_html=True)
-    st.title("🏢 Meu Painel - Área do Cliente")
+    st.title("👤 Meu Painel - Área do Cliente")
     st.markdown("---")
     
     if not contrato_atual or str(contrato_atual.get("telefone", "")).strip() != str(st.session_state.telefone_vinculo).strip():
@@ -131,7 +131,18 @@ if st.session_state.role == "Inquilino":
     st.markdown("#### Meu Histórico de Faturas")
     if not df_historico.empty:
         df_exibicao = df_historico[["mes_referencia", "vencimento", "status", "dias_atraso", "situacao", "anexo"]]
-        st.dataframe(df_exibicao, use_container_width=True, hide_index=True)
+        st.dataframe(
+            df_exibicao, 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={
+                "anexo": st.column_config.LinkColumn(
+                    "Anexo",
+                    help="Clique para baixar o recibo em PDF",
+                    display_text="📥 Baixar PDF"
+                )
+            }
+        )
         
     st.markdown("---")
     if st.button("Sair do Sistema"):
