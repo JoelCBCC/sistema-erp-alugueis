@@ -128,11 +128,11 @@ if st.session_state.role == "Inquilino":
             with m1:
                 st.metric("Vencimento", str(fat['vencimento']))
             with m2:
-                st.metric("Aluguel Base", f"R$ {format_currency(val_base)}")
+                st.metric("Aluguel Base", format_currency(val_base))
             with m3:
-                st.metric("Gastos Variáveis", f"R$ {format_currency(val_var)}")
+                st.metric("Gastos Variáveis", format_currency(val_var))
             with m4:
-                st.metric("Valor Total", f"R$ {format_currency(val_total)}")
+                st.metric("Valor Total", format_currency(val_total))
             
             if str(fat['anexo']).startswith("http"):
                 st.markdown(f"[🔗 **Clique aqui para Ver o Anexo**]({fat['anexo']})")
