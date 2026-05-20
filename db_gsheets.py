@@ -74,7 +74,7 @@ def init_db():
 def load_data():
     sh = get_spreadsheet()
     ws = sh.worksheet("historico")
-    records = ws.get_all_records()
+    records = ws.get_all_records(value_render_option='UNFORMATTED_VALUE')
     df = pd.DataFrame(records)
     if not df.empty:
         # Tenta ordenar e preencher
@@ -84,7 +84,7 @@ def load_data():
 def load_contrato():
     sh = get_spreadsheet()
     ws = sh.worksheet("tabela_contrato")
-    records = ws.get_all_records()
+    records = ws.get_all_records(value_render_option='UNFORMATTED_VALUE')
     if records:
         row = records[0] # Consideramos que o ID=1 está na primeira linha de dados
         return {
@@ -101,7 +101,7 @@ def load_contrato():
 def load_caucao():
     sh = get_spreadsheet()
     ws = sh.worksheet("tabela_caucao_historico")
-    records = ws.get_all_records()
+    records = ws.get_all_records(value_render_option='UNFORMATTED_VALUE')
     df = pd.DataFrame(records)
     return df
 
