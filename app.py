@@ -30,6 +30,10 @@ if 'dados_temporarios' not in st.session_state:
     st.session_state.dados_temporarios = {}
 if 'autenticado' not in st.session_state:
     st.session_state.autenticado = False
+if 'role' not in st.session_state:
+    st.session_state.role = None
+if 'telefone_vinculo' not in st.session_state:
+    st.session_state.telefone_vinculo = None
 
 if not st.session_state.autenticado:
     st.markdown("<h1 style='text-align: center;'>🏢 Acesso Restrito</h1>", unsafe_allow_html=True)
@@ -43,8 +47,11 @@ if not st.session_state.autenticado:
             submit_login = st.form_submit_button("Entrar")
             
             if submit_login:
-                if usuario_input == st.secrets["credenciais"]["usuario"] and senha_input == st.secrets["credenciais"]["senha"]:
+                user_data = db.authenticate_user(usuario_input, senha_input)
+                if user_data:
                     st.session_state.autenticado = True
+                    st.session_state.role = user_data["role"]
+                    st.session_state.telefone_vinculo = str(user_data.get("telefone_vinculo", ""))
                     st.rerun()
                 else:
                     st.error("Usuário ou senha incorretos.")
@@ -87,9 +94,55 @@ st.markdown("---")
 contrato_atual = load_contrato()
 
 # ==========================================
-# BARRA LATERAL (SIDEBAR)
+# PAINEL DO INQUILINO (PORTAL DO CLIENTE)
 # ==========================================
-st.sidebar.success("Logado como: Administrador")
+if st.session_state.role == "Inquilino":
+    st.markdown("<style>[data-testid='stSidebar'] {display: none;}</style>", unsafe_allow_html=True)
+    st.title("🏢 Meu Painel - Área do Cliente")
+    st.markdown("---")
+    
+    if not contrato_atual or str(contrato_atual.get("telefone", "")).strip() != str(st.session_state.telefone_vinculo).strip():
+        st.warning("Nenhum contrato ativo encontrado para o seu usuário (telefone não vinculado).")
+        if st.button("Sair"):
+            st.session_state.autenticado = False
+            st.rerun()
+        st.stop()
+        
+    st.write(f"### Olá, {contrato_atual['inquilina']}!")
+    
+    df_historico = load_data()
+    faturas_abertas = df_historico[df_historico["situacao"] == "Aberta"] if not df_historico.empty else pd.DataFrame()
+    
+    if faturas_abertas.empty:
+        st.success("✅ SEM FATURA EM ABERTO")
+    else:
+        if len(faturas_abertas) == 1:
+            fat = faturas_abertas.iloc[0]
+            # Calcula valor base + variaveis do historico
+            val_total = float(contrato_atual['valor_aluguel']) + float(fat['total_variaveis'] or 0)
+            st.warning(f"⚠️ **Fatura em Aberto**")
+            st.write(f"**Vencimento:** {fat['vencimento']} | **Valor Total (com aluguel base):** R$ {format_currency(val_total)}")
+            if str(fat['anexo']).startswith("http"):
+                st.markdown(f"[📥 Baixar Fatura (PDF)]({fat['anexo']})")
+        else:
+            st.error("🚨 HÁ MAIS DE UMA FATURA EM ABERTO")
+            
+    st.markdown("---")
+    st.markdown("#### Meu Histórico de Faturas")
+    if not df_historico.empty:
+        df_exibicao = df_historico[["mes_referencia", "vencimento", "status", "dias_atraso", "situacao", "anexo"]]
+        st.dataframe(df_exibicao, use_container_width=True, hide_index=True)
+        
+    st.markdown("---")
+    if st.button("Sair do Sistema"):
+        st.session_state.autenticado = False
+        st.rerun()
+    st.stop()
+
+# ==========================================
+# BARRA LATERAL (SIDEBAR) - Visão Admin
+# ==========================================
+st.sidebar.success(f"Logado como: {st.session_state.role}")
 if st.sidebar.button("Sair do Sistema", use_container_width=True):
     st.session_state.autenticado = False
     st.rerun()
@@ -177,11 +230,12 @@ with st.sidebar.form("form_nova_fatura"):
                 st.rerun()
         else:
             st.error("O campo 'Mês de Referência' é obrigatório!")
-
+    st.markdown("---")
+    
 # ==========================================
-# ARQUITETURA DE ABAS
+# ABAS DO SISTEMA (TABS)
 # ==========================================
-tab_faturamento, tab_contrato = st.tabs(["📊 Faturamento & Histórico", "📜 Contrato & Caução"])
+tab_faturamento, tab_contrato, tab_usuarios = st.tabs(["🧾 Faturamento & Histórico", "📜 Contrato & Caução", "👥 Gestão de Usuários"])
 
 # ==========================================
 # ABA 1: FATURAMENTO E HISTÓRICO
@@ -357,7 +411,8 @@ with tab_contrato:
     with st.form("form_contrato"):
         c_col1, c_col2 = st.columns(2)
         with c_col1:
-            inp_inquilina = st.text_input("Nome da(o) Inquilina(o)", value=contrato_atual["inquilina"] if contrato_atual else "")
+            inp_nome = st.text_input("Nome da(o) Inquilina(o)", value=contrato_atual["inquilina"] if contrato_atual else "")
+            inp_telefone = st.text_input("Telefone (ID do Cliente)", value=contrato_atual.get("telefone", "") if contrato_atual else "")
             inp_aluguel = st.number_input("Valor Base do Aluguel (R$)", min_value=0.0, value=float(contrato_atual["valor_aluguel"]) if contrato_atual else 1500.0, step=100.0, format="%.2f")
             inp_bonus = st.number_input("Desconto de Pontualidade (R$)", min_value=0.0, value=float(contrato_atual["bonus_pontualidade"]) if contrato_atual else 150.0, step=10.0, format="%.2f")
         with c_col2:
@@ -374,11 +429,14 @@ with tab_contrato:
         btn_salvar_contrato = st.form_submit_button("Salvar Contrato", type="primary")
         
         if btn_salvar_contrato:
-            with st.spinner("Salvando contrato na planilha..."):
-                db.save_contrato(inp_inquilina, inp_aluguel, inp_bonus, inp_multa, inp_caucao, inp_inicio)
-                if not contrato_atual:
-                    db.insert_caucao(inp_inicio, 0.0, inp_caucao)
-            st.success("Contrato salvo com sucesso!")
+            if not inp_nome or not inp_telefone:
+                st.error("Por favor, preencha o Nome e o Telefone!")
+            else:
+                with st.spinner("Salvando as regras do contrato..."):
+                    db.save_contrato(inp_nome, inp_aluguel, inp_bonus, inp_multa, inp_caucao, inp_inicio, inp_telefone)
+                    if not contrato_atual:
+                        db.insert_caucao(inp_inicio, 0.0, inp_caucao)
+                st.success("Contrato salvo com sucesso! O sistema foi parametrizado.")
             st.rerun()
 
     st.markdown("---")
@@ -427,3 +485,43 @@ with tab_contrato:
             st.dataframe(df_exibicao_caucao, use_container_width=True, hide_index=True)
     else:
         st.info("Nenhuma caução registrada no histórico. Salve as configurações do Contrato Vigente para inicializar a garantia.")
+
+# ==========================================
+# ABA 3: GESTÃO DE USUÁRIOS
+# ==========================================
+with tab_usuarios:
+    st.subheader("👥 Gestão de Usuários e Acessos")
+    df_users = db.get_all_users()
+    if not df_users.empty:
+        df_exibicao = df_users[["id", "usuario", "role", "telefone_vinculo"]].copy()
+        df_exibicao.columns = ["ID", "Usuário", "Perfil", "Telefone (Vínculo)"]
+        st.dataframe(df_exibicao, hide_index=True, use_container_width=True)
+        
+    st.markdown("#### Criar Novo Usuário")
+    with st.form("form_novo_usuario"):
+        c1, c2 = st.columns(2)
+        with c1:
+            novo_usu = st.text_input("Nome de Usuário (Login)")
+            novo_role = st.selectbox("Perfil", ["Inquilino", "Admin"])
+        with c2:
+            nova_senha = st.text_input("Senha", type="password")
+            novo_tel = st.text_input("Telefone (Usado como ID de vínculo com o Contrato)", help="Deixe em branco para Admin")
+        
+        if st.form_submit_button("Cadastrar Usuário", type="primary"):
+            if not novo_usu or not nova_senha:
+                st.error("Usuário e Senha são obrigatórios!")
+            else:
+                db.insert_user(novo_usu, nova_senha, novo_role, novo_tel)
+                st.success("Usuário criado com sucesso!")
+                st.rerun()
+            
+    st.markdown("#### Excluir Usuário")
+    with st.form("form_del_usuario"):
+        del_id = st.text_input("ID do Usuário a excluir")
+        if st.form_submit_button("Excluir Usuário"):
+            if del_id.isdigit():
+                db.delete_user(del_id)
+                st.success("Usuário excluído!")
+                st.rerun()
+            else:
+                st.error("ID inválido.")

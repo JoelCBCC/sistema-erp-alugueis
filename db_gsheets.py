@@ -5,6 +5,7 @@ from google.oauth2.service_account import Credentials
 import io
 from google.cloud import storage
 import time
+import hashlib
 
 # Scopes needed for Google Sheets and Google Drive
 SCOPES = [
@@ -33,7 +34,7 @@ def init_db():
     try:
         ws_historico = sh.worksheet("historico")
     except gspread.exceptions.WorksheetNotFound:
-        ws_historico = sh.add_worksheet(title="historico", rows="1000", cols="20")
+        ws_historico = sh.add_worksheet(title="historico", rows="1000", cols="10")
         
     try:
         ws_contrato = sh.worksheet("tabela_contrato")
@@ -44,16 +45,31 @@ def init_db():
         ws_caucao = sh.worksheet("tabela_caucao_historico")
     except gspread.exceptions.WorksheetNotFound:
         ws_caucao = sh.add_worksheet(title="tabela_caucao_historico", rows="100", cols="10")
+        
+    try:
+        ws_usuarios = sh.worksheet("tabela_usuarios")
+    except gspread.exceptions.WorksheetNotFound:
+        ws_usuarios = sh.add_worksheet(title="tabela_usuarios", rows="100", cols="5")
 
     # Iniciar cabeçalhos se não existirem
     if ws_historico.acell('A1').value != "id":
         ws_historico.insert_row(["id", "mes_referencia", "vencimento", "data_pagamento", "status", "dias_atraso", "total_variaveis", "situacao", "anexo", "nome_anexo"], 1)
         
     if ws_contrato.acell('A1').value != "id":
-        ws_contrato.insert_row(["id", "inquilina", "valor_aluguel", "bonus_pontualidade", "percentual_multa", "caucao_inicial", "data_inicio"], 1)
+        ws_contrato.insert_row(["id", "inquilina", "valor_aluguel", "bonus_pontualidade", "percentual_multa", "caucao_inicial", "data_inicio", "telefone"], 1)
+    else:
+        # Atualização retroativa para quem já tem a tabela criada sem a coluna telefone
+        if ws_contrato.acell('H1').value != "telefone":
+            ws_contrato.update_acell('H1', 'telefone')
         
     if ws_caucao.acell('A1').value != "id":
         ws_caucao.insert_row(["id", "data_atualizacao", "indice_percentual", "valor_atualizado"], 1)
+
+    if ws_usuarios.acell('A1').value != "id":
+        ws_usuarios.insert_row(["id", "usuario", "senha_hash", "role", "telefone_vinculo"], 1)
+        # Cria admin default
+        senha_hash = hashlib.sha256("123".encode()).hexdigest()
+        ws_usuarios.append_row([1, "admin", senha_hash, "Admin", ""])
 
 def load_data():
     sh = get_spreadsheet()
@@ -160,7 +176,7 @@ def update_fatura(fatura_id, mes_referencia, vencimento, total_variaveis, data_p
         ]
         ws.batch_update(updates)
 
-def save_contrato(inquilina, valor_aluguel, bonus_pontualidade, percentual_multa, caucao_inicial, data_inicio):
+def save_contrato(inquilina, valor_aluguel, bonus_pontualidade, percentual_multa, caucao_inicial, data_inicio, telefone):
     sh = get_spreadsheet()
     ws = sh.worksheet("tabela_contrato")
     records = ws.get_all_records()
@@ -172,12 +188,13 @@ def save_contrato(inquilina, valor_aluguel, bonus_pontualidade, percentual_multa
         bonus_pontualidade,
         percentual_multa,
         caucao_inicial,
-        str(data_inicio)
+        str(data_inicio),
+        str(telefone)
     ]
     
     if records:
         # Update primeira linha de dados (row 2)
-        ws.update('A2:G2', [linha_dados])
+        ws.update('A2:H2', [linha_dados])
     else:
         ws.append_row(linha_dados)
 
@@ -228,3 +245,41 @@ def upload_to_gcs(file_bytes, filename):
         import streamlit as st
         st.error(f"**Falha ao enviar arquivo para o Google Cloud Storage.**\n\nDetalhes: `{str(e)}`")
         st.stop()
+
+# ==========================================
+# GERENCIAMENTO DE USUÁRIOS
+# ==========================================
+def hash_password(password):
+    return hashlib.sha256(str(password).encode()).hexdigest()
+
+def get_all_users():
+    sh = get_spreadsheet()
+    ws = sh.worksheet("tabela_usuarios")
+    records = ws.get_all_records()
+    return pd.DataFrame(records)
+
+def authenticate_user(usuario, senha):
+    df = get_all_users()
+    if df.empty: return None
+    user_row = df[df["usuario"] == usuario]
+    if user_row.empty: return None
+    user = user_row.iloc[0]
+    if user["senha_hash"] == hash_password(senha):
+        return user.to_dict()
+    return None
+
+def insert_user(usuario, senha, role, telefone_vinculo):
+    sh = get_spreadsheet()
+    ws = sh.worksheet("tabela_usuarios")
+    records = ws.get_all_records()
+    novo_id = max([r["id"] for r in records if str(r["id"]).isdigit()]) + 1 if records else 1
+    ws.append_row([novo_id, usuario, hash_password(senha), role, telefone_vinculo])
+
+def delete_user(user_id):
+    sh = get_spreadsheet()
+    ws = sh.worksheet("tabela_usuarios")
+    records = ws.get_all_records()
+    for i, r in enumerate(records):
+        if str(r["id"]) == str(user_id):
+            ws.delete_rows(i + 2) # +2 pois 0-indexed + linha de cabeçalho
+            break
