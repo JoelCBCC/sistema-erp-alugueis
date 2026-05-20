@@ -133,6 +133,10 @@ if st.session_state.role == "Inquilino":
             
             st.warning(f"⚠️ **Fatura em Aberto - Referência: {fat['mes_referencia']}**")
             
+            vencimento_date = pd.to_datetime(fat['vencimento']).date()
+            if vencimento_date < date.today():
+                st.error("🚨 **Esta fatura está vencida!**")
+            
             m1, m2, m3, m4 = st.columns(4)
             with m1:
                 st.metric("Vencimento", format_date(fat['vencimento']))
