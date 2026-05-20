@@ -118,12 +118,24 @@ if st.session_state.role == "Inquilino":
     else:
         if len(faturas_abertas) == 1:
             fat = faturas_abertas.iloc[0]
-            # Calcula valor base + variaveis do historico
-            val_total = float(contrato_atual['valor_aluguel']) + float(fat['total_variaveis'] or 0)
-            st.warning(f"⚠️ **Fatura em Aberto**")
-            st.write(f"**Vencimento:** {fat['vencimento']} | **Valor Total (com aluguel base):** R$ {format_currency(val_total)}")
+            val_base = float(contrato_atual['valor_aluguel'])
+            val_var = float(fat['total_variaveis'] or 0)
+            val_total = val_base + val_var
+            
+            st.warning(f"⚠️ **Fatura em Aberto - Referência: {fat['mes_referencia']}**")
+            
+            m1, m2, m3, m4 = st.columns(4)
+            with m1:
+                st.metric("Vencimento", str(fat['vencimento']))
+            with m2:
+                st.metric("Aluguel Base", f"R$ {format_currency(val_base)}")
+            with m3:
+                st.metric("Gastos Variáveis", f"R$ {format_currency(val_var)}")
+            with m4:
+                st.metric("Valor Total", f"R$ {format_currency(val_total)}")
+            
             if str(fat['anexo']).startswith("http"):
-                st.markdown(f"[📥 Baixar Fatura (PDF)]({fat['anexo']})")
+                st.markdown(f"[🔗 **Clique aqui para Ver o Anexo**]({fat['anexo']})")
         else:
             st.error("🚨 HÁ MAIS DE UMA FATURA EM ABERTO")
             
@@ -138,8 +150,8 @@ if st.session_state.role == "Inquilino":
             column_config={
                 "anexo": st.column_config.LinkColumn(
                     "Anexo",
-                    help="Clique para baixar o recibo em PDF",
-                    display_text="📥 Baixar PDF"
+                    help="Clique para visualizar o anexo",
+                    display_text="🔗 Ver Anexo"
                 )
             }
         )
