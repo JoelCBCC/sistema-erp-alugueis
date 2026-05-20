@@ -93,7 +93,8 @@ def load_contrato():
             "bonus_pontualidade": float(row.get("bonus_pontualidade", 0)),
             "percentual_multa": float(row.get("percentual_multa", 0)),
             "caucao_inicial": float(row.get("caucao_inicial", 0)),
-            "data_inicio": str(row.get("data_inicio", ""))
+            "data_inicio": str(row.get("data_inicio", "")),
+            "telefone": str(row.get("telefone", ""))
         }
     return None
 
