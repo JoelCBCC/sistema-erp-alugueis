@@ -262,7 +262,10 @@ def get_all_users():
 def authenticate_user(usuario, senha):
     df = get_all_users()
     if df.empty: return None
-    user_row = df[df["usuario"] == usuario]
+    
+    # Permite que o login seja feito digitando o Nome de Usuário OU o Telefone
+    user_row = df[(df["usuario"].astype(str) == str(usuario)) | (df["telefone_vinculo"].astype(str) == str(usuario))]
+    
     if user_row.empty: return None
     user = user_row.iloc[0]
     if user["senha_hash"] == hash_password(senha):
