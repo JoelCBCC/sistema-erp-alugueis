@@ -176,13 +176,6 @@ if st.session_state.role == "Inquilino":
 # BARRA LATERAL (SIDEBAR) - Visão Admin
 # ==========================================
 st.sidebar.success(f"Logado como: {st.session_state.role}")
-if st.sidebar.button("Sair do Sistema", use_container_width=True):
-    st.session_state.autenticado = False
-    st.rerun()
-    
-if st.sidebar.button("ℹ️ Sobre o Sistema", use_container_width=True):
-    modal_sobre()
-    
 st.sidebar.markdown("---")
 
 st.sidebar.header("⚙️ Parâmetros do Contrato")
@@ -263,8 +256,14 @@ with st.sidebar.form("form_nova_fatura"):
                 st.rerun()
         else:
             st.error("O campo 'Mês de Referência' é obrigatório!")
-    st.markdown("---")
-    
+
+st.sidebar.markdown("---")
+if st.sidebar.button("ℹ️ Sobre o Sistema", use_container_width=True):
+    modal_sobre()
+if st.sidebar.button("Sair do Sistema", use_container_width=True):
+    st.session_state.autenticado = False
+    st.rerun()
+
 # ==========================================
 # ABAS DO SISTEMA (TABS)
 # ==========================================
