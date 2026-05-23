@@ -90,6 +90,7 @@ def init_db():
         senha_hash = hashlib.sha256("123".encode()).hexdigest()
         ws_usuarios.append_row([1, "admin", senha_hash, "Admin", ""])
 
+@st.cache_data(ttl=300)
 def load_data():
     sh = get_spreadsheet()
     ws = sh.worksheet("historico")
@@ -100,6 +101,7 @@ def load_data():
         df = df.sort_values(by="vencimento", ascending=True)
     return df
 
+@st.cache_data(ttl=300)
 def load_contrato():
     sh = get_spreadsheet()
     ws = sh.worksheet("tabela_contrato")
@@ -117,6 +119,7 @@ def load_contrato():
         }
     return None
 
+@st.cache_data(ttl=300)
 def load_caucao():
     sh = get_spreadsheet()
     ws = sh.worksheet("tabela_caucao_historico")
@@ -150,6 +153,7 @@ def insert_fatura(mes_referencia, vencimento, status, dias_atraso, total_variave
         nome_anexo if nome_anexo else ""
     ]
     ws.append_row(nova_linha)
+    st.cache_data.clear()
     
 def get_fatura_row_index(fatura_id):
     sh = get_spreadsheet()
@@ -171,6 +175,7 @@ def update_pagamento(fatura_id, data_pagamento, dias_atraso, status, situacao):
         ws.update_cell(idx, 5, status)
         ws.update_cell(idx, 6, dias_atraso)
         ws.update_cell(idx, 8, situacao)
+        st.cache_data.clear()
 
 def delete_fatura(fatura_id):
     idx = get_fatura_row_index(fatura_id)
@@ -178,6 +183,7 @@ def delete_fatura(fatura_id):
         sh = get_spreadsheet()
         ws = sh.worksheet("historico")
         ws.delete_rows(idx)
+        st.cache_data.clear()
 
 def update_fatura(fatura_id, mes_referencia, vencimento, total_variaveis, data_pagamento, status, dias_atraso, situacao):
     idx = get_fatura_row_index(fatura_id)
@@ -195,6 +201,7 @@ def update_fatura(fatura_id, mes_referencia, vencimento, total_variaveis, data_p
             {'range': f'H{idx}', 'values': [[str(situacao)]]},
         ]
         ws.batch_update(updates)
+        st.cache_data.clear()
 
 def save_contrato(inquilina, valor_aluguel, bonus_pontualidade, percentual_multa, caucao_inicial, data_inicio, telefone):
     sh = get_spreadsheet()
@@ -217,6 +224,7 @@ def save_contrato(inquilina, valor_aluguel, bonus_pontualidade, percentual_multa
         ws.update('A2:H2', [linha_dados])
     else:
         ws.append_row(linha_dados)
+    st.cache_data.clear()
 
 def insert_caucao(data_atualizacao, indice_percentual, valor_atualizado):
     sh = get_spreadsheet()
@@ -230,6 +238,7 @@ def insert_caucao(data_atualizacao, indice_percentual, valor_atualizado):
         valor_atualizado
     ]
     ws.append_row(nova_linha)
+    st.cache_data.clear()
 
 def check_fatura_exists(mes_referencia):
     sh = get_spreadsheet()
@@ -272,6 +281,7 @@ def upload_to_gcs(file_bytes, filename):
 def hash_password(password):
     return hashlib.sha256(str(password).encode()).hexdigest()
 
+@st.cache_data(ttl=300)
 def get_all_users():
     sh = get_spreadsheet()
     ws = sh.worksheet("tabela_usuarios")
@@ -297,6 +307,7 @@ def insert_user(usuario, senha, role, telefone_vinculo):
     records = ws.get_all_records()
     novo_id = max([r["id"] for r in records if str(r["id"]).isdigit()]) + 1 if records else 1
     ws.append_row([novo_id, usuario, hash_password(senha), role, telefone_vinculo])
+    st.cache_data.clear()
 
 def delete_user(user_id):
     sh = get_spreadsheet()
@@ -305,4 +316,5 @@ def delete_user(user_id):
     for i, r in enumerate(records):
         if str(r["id"]) == str(user_id):
             ws.delete_rows(i + 2) # +2 pois 0-indexed + linha de cabeçalho
+            st.cache_data.clear()
             break
